@@ -94,7 +94,7 @@ RandomAccessUpdate(u64Int TableSize)
   double r1,rantime;
   u64Int LocalTableSize;
   omp_lock_t writelock;
-  
+
   rantime = 0;
 
   /* Initialize main table */
@@ -137,13 +137,13 @@ RandomAccessUpdate(u64Int TableSize)
 
 #pragma omp for
   for(i = 0; i < numupdates; i++){
-    
+
 
   ran = (ran << 1) ^ ((s64Int) ran < 0 ? POLY : 0);
 
   r1 = -RTSEC();
   omp_set_lock(&writelock);
-  
+
   Table[(ran & (TableSize-1))] ^= ran;
 
   omp_unset_lock(&writelock);
@@ -157,7 +157,7 @@ RandomAccessUpdate(u64Int TableSize)
 
  }
 
- omp_destroy_lock(&writelock); 
+ omp_destroy_lock(&writelock);
 
 }
 
@@ -169,15 +169,20 @@ int main(int argc, char **argv )
   char *tmp;
   HPCC_Params p;
 
+  p.HPLMaxProcMem = 1;
+  printf("HPLMaxProcMem: %lu\n", p.HPLMaxProcMem);
   if( argc == 2 )
     {
       sscanf( argv[1], "%d", &pow2_size );
-      for( r=0, p.HPLMaxProcMem=sizeof(u64Int); 
-	   r<pow2_size; r++, p.HPLMaxProcMem <<= 1 );
+      for( r=0, p.HPLMaxProcMem=sizeof(u64Int);
+           r<pow2_size;
+           r++, p.HPLMaxProcMem <<= 1 );
     }
   else
-    p.HPLMaxProcMem = 20000000;
+    // p.HPLMaxProcMem = 20000000;
+    p.HPLMaxProcMem =    400000000;
 
+  printf("HPLMaxProcMem: %.3e\n", (double) p.HPLMaxProcMem);
   tmp = p.outFname;
   strcpy(tmp, "hpccoutf.txt" );
   r = RandomAccess( &p, 1, &d_gups, &i_failure );
@@ -203,7 +208,7 @@ RandomAccess(HPCC_Params *params, int doIO, double *GUPs, int *failure)
   int PowerofTwo;
   u64Int localLogTableSize;
   u64Int localTableSize;
-  
+
 
   outFile = fopen( params->outFname, "a" );
 
@@ -217,7 +222,6 @@ RandomAccess(HPCC_Params *params, int doIO, double *GUPs, int *failure)
   /* calculate local memory per node for the update table */
   totalMem = params->HPLMaxProcMem;
   totalMem /= sizeof(u64Int);
-
   /* calculate the size of update array (must be a power of 2) */
   for (totalMem *= 0.5, logTableSize = 0, TableSize = 1;
        totalMem >= 1.0;
@@ -229,32 +233,32 @@ RandomAccess(HPCC_Params *params, int doIO, double *GUPs, int *failure)
   localTableSize = TableSize;
 
 #pragma omp parallel
-  { 
+  {
 
 #pragma omp master
       {
-	numthreads =  omp_get_num_threads();
-	fprintf( outFile, "Running on %d processors\n", numthreads );
-	TableSize =  TableSize * numthreads;      
+          numthreads =  omp_get_num_threads();
+          fprintf( outFile, "Running on %d processors\n", numthreads );
+          TableSize =  TableSize * numthreads;
 
-    for (i = 1, logNumThreads = 0; ; logNumThreads++, i <<= 1) {
-      if (i == numthreads) {
-	PowerofTwo = HPCC_TRUE;
-	break;
+          for (i = 1, logNumThreads = 0; ; logNumThreads++, i <<= 1) {
+              if (i == numthreads) {
+                  PowerofTwo = HPCC_TRUE;
+                  break;
 
-      }
-    
-    }
-    
+              }
+
+          }
+
     logTableSize = logTableSize + logNumThreads;
 
       }
   }
 
-  fprintf( outFile, "Local table size   = 2^" FSTR64 " = " FSTR64 " words\n", 
+  fprintf( outFile, "Local table size   = 2^" FSTR64 " = " FSTR64 " words\n",
 	   (long long int)localLogTableSize, (long long int)localTableSize);
 
-  fprintf( outFile, "Main table size   = 2^" FSTR64 " = " FSTR64 " words\n", 
+  fprintf( outFile, "Main table size   = 2^" FSTR64 " = " FSTR64 " words\n",
 	   (long long int)logTableSize, (long long int)TableSize);
   fprintf( outFile, "Number of updates = " FSTR64 "\n", (long long int)NUPDATE);
 
@@ -263,7 +267,7 @@ RandomAccess(HPCC_Params *params, int doIO, double *GUPs, int *failure)
     {
       if (doIO)
         {
-          fprintf( outFile, "Failed to allocate memory for the update table (" FSTR64 ").\n", 
+          fprintf( outFile, "Failed to allocate memory for the update table (" FSTR64 ").\n",
                             (long long int) TableSize);
           fclose( outFile );
         }
@@ -297,7 +301,7 @@ RandomAccess(HPCC_Params *params, int doIO, double *GUPs, int *failure)
       numupdates = NUPDATE;
 
       HPCC_RandomAccessCheck(logTableSize, logNumThreads, TableSize, numupdates, &NumErrors);
-      
+
       fprintf( outFile, "Found " FSTR64 " errors in " FSTR64 " locations (%s).\n",
 	       NumErrors, TableSize, (NumErrors <= 0.01*TableSize) ?
 	       "passed" : "failed");
